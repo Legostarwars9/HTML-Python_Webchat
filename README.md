@@ -33,14 +33,12 @@
 
 <h1>Usage</h1>
 <h2>How to use</h2>
-<ul>
 <h3>
-  1. Download Latest Release
-  2. Run chat.py
-  3. Go to localhost:5000
-  4. Done
+  1. Download Latest Release <br>
+  2. Run chat.py <br> 
+  3. Go to localhost:5000 <br>
+  4. Done <br>
 </h3>
-</ul>
 
 <h2>
   -Commands List-
