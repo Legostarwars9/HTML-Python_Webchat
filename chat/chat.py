@@ -30,6 +30,8 @@ def get_cookie_id():
     if COOKIE_NAME not in session:
         session[COOKIE_NAME] = uuid.uuid4().hex
     return session[COOKIE_NAME]
+def get_room():
+    return session.get("room", "public")
 
 # ---------------- Users ----------------
 def load_users():
@@ -127,6 +129,23 @@ threading.Thread(target=prune,daemon=True).start()
 # ---------------- Routes ----------------
 @app.route("/")
 def index(): return send_from_directory("templates","chat.html")
+
+@app.route("/room/join", methods=["POST"])
+def join_room():
+    if is_banned(): return "banned", 403
+
+    data = request.json
+    room = data.get("room")
+
+    if not room or not room.isalnum():
+        return "bad room", 400
+
+    path = msg_path(room)
+    if not os.path.exists(path):
+        return "no room", 404
+
+    session["room"] = room
+    return "ok"
 
 @app.route("/register",methods=["POST"])
 def register():
