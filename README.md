@@ -22,8 +22,9 @@
 <h1>Bugs</h1>
 <h2>-Stable Bugs-</h2>
 <ul>
-    <h4>Muting users does not work properly</h3>
-    <h4>Banning users does not work properly</h3>
+    <h4>Muting users does not work properly</h4>
+    <h4>Banning users does not work properly</h4>
+    <h4></h4>
 </ul>
 <h2>-Experimental Bugs-</h2>
 <ul>
@@ -38,6 +39,14 @@
   2. Run chat.py <br> 
   3. Go to localhost:5000 <br>
   4. Done <br>
+</h4>
+<h2>How to get Admin</h2>
+<h4>
+  1. Have some access to the device the server is hosted on<br>
+  2. Navigate to Users.txt<br>
+  3. Find your User<br>
+  4. Change [Username]:[Encryped Password]:user > [Username]:[Encryped Password]:admin<br>
+  5. Log out and log back in <br>
 </h4>
 
 <h2>
