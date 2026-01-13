@@ -40,6 +40,25 @@
   3. Go to localhost:5000 <br>
   4. Done <br>
 </h4>
+
+<h2>How to host to the internet</h2>
+<h4>
+  1. Start chat.py<br>
+  2. Port forward port 5000 on your router<br>
+  3. go to [Your IP]:5000<br>
+</h4>
+
+<h2>How to host behind CGNAT</h2>
+<h4>
+  1. Install your favorite reverse proxy (ngrok, playit.gg premium, Cloudflare, etc) <br>
+  2. Start chat.py <br>
+  3. Start the reverse proxy provider of your choice on port 5000<br>
+  4. Go to the IP it gives you OR your custom domain you set up with the proivider.<br><br>
+  -Example commmands with Cloudflared free url<br>
+    [User]/chat> python3 chat.py<br>
+    [User]/chat> cloudflared --url localhost:5000<br>
+</h4>
+
 <h2>How to get Admin</h2>
 <h4>
   1. Have some access to the device the server is hosted on<br>
