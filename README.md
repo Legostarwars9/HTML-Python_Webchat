@@ -13,7 +13,7 @@
   </ul>
 </ul>
 
--Planned Features-
+<h2>-Planned Features-</h2>
 <ul>
   <h3>File Sharing</h3>
   <h3>Image Imbeding</h3>
