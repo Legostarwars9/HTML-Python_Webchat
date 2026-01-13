@@ -171,7 +171,33 @@ function load(){
         });
 }
 
-function send(){ const msg=messageInput.value.trim(); if(!msg) return; fetch(msg.startsWith("/")?"/command":"/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:msg,cmd:msg,room:room})}); messageInput.value=""; }
+function send(){ 
+    const msg = messageInput.value.trim(); 
+    if(!msg) return; 
+
+    fetch(msg.startsWith("/") ? "/command" : "/send", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({message: msg, cmd: msg, room: room})
+    })
+    .then(r => {
+        if(r.status === 402) {           // Muted
+            errorDiv.textContent = "You are muted. You cannot send messages.";
+        }
+        else if(r.status === 403) {      // Banned
+            errorDiv.textContent = "You are banned. Access denied.";
+        }
+        else if(r.status === 429) {      // Rate limit
+            errorDiv.textContent = "Rate limit exceeded. Please wait a few seconds.";
+        }
+        else if(r.ok) {
+            errorDiv.textContent = "";   // Clear any previous error
+        }
+    });
+
+    messageInput.value = ""; 
+}
+
 function deleteMsg(id){ fetch("/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cmd:"/delete "+id})}).then(()=>load()); }
 function loadUsers(){ fetch("/users").then(r=>r.json()).then(d=>userList.innerHTML=d.map(u=>`<div class="user">${u}</div>`).join("")); }
 function switchRoom(r){ room=r; lastLen=0; load(); }
