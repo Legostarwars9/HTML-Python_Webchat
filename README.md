@@ -18,3 +18,36 @@
   <h3>File Sharing</h3>
   <h3>Image Imbeding</h3>
 </ul>
+
+<h1>Bugs</h1>
+<h2>-Stable Bugs-</h2>
+<ul>
+    <h3>Muting users does not work properly</h3>
+    <h3>Banning users does not work properly</h3>
+</ul>
+<h2>-Experimental Bugs-</h2>
+<ul>
+    <h3>Commands Do not work properly</h3>
+    <h3>Admin UI does not load</h3>
+</ul>
+
+<h1>Usage</h1>
+<h2>How to use</h2>
+<h3>
+  1. Download Latest Release
+  2. Run chat.py
+  3. Go to localhost:5000
+  4. Done
+</h3>
+
+<h2>
+  -Commands List-
+</h2>
+<ul>
+  <h3>/delete - Deletes a message - Syntax: /delete [Message ID]</h3>
+  <h3>/mute - temporarily mutes a user until unmuted or server restarts - Syntax: /mute [Username] (Muting and Unmuting does not currently work</h3>
+  <h3>/unmute - unmutes a user - Syntax: /unmute [Username]</h3>
+  <h3>/ban - Bans a user - Syntax: /ban [Username] (Currently does not work)</h3>
+  <h3>/unban - Unbans a user - Syntax: /unban [Username]</h3>
+  <h3>/ip-ban - Bans a IP address - /ip-ban [Username] (only in experimental build)</h3>
+</ul>
