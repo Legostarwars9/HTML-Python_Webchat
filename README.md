@@ -1,44 +1,44 @@
 # HTML-Python_Webchat
-<h2>So I was once looking for a Web Based Application like Discord that I could set up in my home on a Raspberry PI mini server that I have. I couldn't find one that I could easily install onto my Raspberry PI and set up within a few minutes...</h2>
+<h3>So I was once looking for a Web Based Application like Discord that I could set up in my home on a Raspberry PI mini server that I have. I couldn't find one that I could easily install onto my Raspberry PI and set up within a few minutes...</h3>
 
-<h2>So with help of ChatGPT, I created one.</h2>
+<h3>So with help of ChatGPT, I created one.</h3>
 
 <h2>--Features--</h2>
 <ul>
-  <h3>Chatting (Duh)</h3>
-  <h3>Simple Moderation Control</h3>
+  <h4>Chatting (Duh)</h4>
+  <h4>Simple Moderation Control</h4>
   <ul>
-    <h4>Commands (/delete, /ban, /mute, /ip-ban, /unmute, etc)</h4>
-    <h4>Quick Delete Mode</h4>
+    <h5>Commands (/delete, /ban, /mute, /ip-ban, /unmute, etc)</h5>
+    <h5>Quick Delete Mode</h5>
   </ul>
 </ul>
 
 <h2>-Planned Features-</h2>
 <ul>
-  <h3>File Sharing</h3>
-  <h3>Image Imbeding</h3>
+  <h4>File Sharing</h4>
+  <h4>Image Imbeding</h4>
 </ul>
 
 <h1>Bugs</h1>
 <h2>-Stable Bugs-</h2>
 <ul>
-    <h3>Muting users does not work properly</h3>
-    <h3>Banning users does not work properly</h3>
+    <h4>Muting users does not work properly</h3>
+    <h4>Banning users does not work properly</h3>
 </ul>
 <h2>-Experimental Bugs-</h2>
 <ul>
-    <h3>Commands Do not work properly</h3>
-    <h3>Admin UI does not load</h3>
+    <h4>Commands Do not work properly</h3>
+    <h4>Admin UI does not load</h3>
 </ul>
 
 <h1>Usage</h1>
 <h2>How to use</h2>
-<h3>
+<h4>
   1. Download Latest Release <br>
   2. Run chat.py <br> 
   3. Go to localhost:5000 <br>
   4. Done <br>
-</h3>
+</h4>
 
 <h2>
   -Commands List-
