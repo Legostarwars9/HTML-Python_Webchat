@@ -4,11 +4,17 @@
 <h2>So with help of ChatGPT, I created one.</h2>
 
 <h2>--Features--</h2>
-<ul><h3>Chatting (Duh)</h3>
-<h3>Simple Moderation Control</h3>
-<ul><h4>Commands (/delete, /ban, /mute, /ip-ban, /unmute, etc)</h4>
-<h4>Quick Delete Mode</h4></ul>
-<h3>To be expanded on</h3>
-
+<ul>
+  <h3>Chatting (Duh)</h3>
+  <h3>Simple Moderation Control</h3>
+  <ul>
+    <h4>Commands (/delete, /ban, /mute, /ip-ban, /unmute, etc)</h4>
+    <h4>Quick Delete Mode</h4>
+  </ul>
 </ul>
 
+-Planned Features-
+<ul>
+  <h3>File Sharing</h3>
+  <h3>Image Imbeding</h3>
+</ul>
