@@ -188,15 +188,16 @@ def ping():
 @app.route("/send",methods=["POST"])
 def send():
     u = auth()
-    if not u: return "no",403
+    if not u: return "banned",403
+    if u in muted_users: return "muted",402   # <-- changed to 402
     if ratelimit(u): return "rate",429
-    if is_banned(): return jsonify(status="banned"),403
     d = request.json
-    room = d.get("room","public")
+    room = session.get("room", "public")
     p = msg_path(room)
     os.makedirs(MSG_DIR, exist_ok=True)
-    write_msg(p,u,d["message"])
+    write_msg(p, u, d["message"])
     return "ok"
+
 
 @app.route("/messages")
 def messages():
