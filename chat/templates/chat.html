@@ -243,6 +243,10 @@ function joinRoom() {
         }
     });
 }
+function showStatus(msg){
+    errorDiv.textContent = msg;
+    setTimeout(()=>errorDiv.textContent="",5000);
+}
 
 // ---------------- Start fetching ----------------
 function start(){ load(); setInterval(load,1000); setInterval(loadUsers,3000); setInterval(()=>fetch("/ping",{method:"POST"}),5000); }
