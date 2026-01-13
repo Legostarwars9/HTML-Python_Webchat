@@ -49,9 +49,7 @@
   5. Log out and log back in <br>
 </h4>
 
-<h2>
-  -Commands List-
-</h2>
+<h2>Commands List</h2>
 <ul>
   <h3>/delete - Deletes a message - Syntax: /delete [Message ID]</h3>
   <h3>/mute - temporarily mutes a user until unmuted or server restarts - Syntax: /mute [Username] (Muting and Unmuting does not currently work</h3>
