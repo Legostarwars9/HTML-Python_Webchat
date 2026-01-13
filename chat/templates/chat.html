@@ -62,6 +62,8 @@ button:hover {background:#3a3f4a; cursor:pointer;}
     <div>
         <button onclick="switchRoom('public')">Public</button>
         <button onclick="newRoom()">New Room</button>
+        <input id="roomCode" placeholder="Enter Room Code" style="width:100px; margin-left:5px;">
+        <button onclick="joinRoom()">Join</button>
         <span id="roomLabel"></span>
         <label id="showIDsLabel" style="margin-left:10px; display:none;">
             <input type="checkbox" id="showIDs"> Show Message IDs
@@ -193,6 +195,26 @@ function checkAdmin(){
     .then(r=>r.json()).then(res=>{
         if(res.role==="admin"){ isAdmin=true; showIDsLabel.style.display="inline"; showDeleteLabel.style.display="inline"; }
         else{ isAdmin=false; showIDsLabel.style.display="none"; showDeleteLabel.style.display="none"; }
+    });
+}
+//--Join Room--
+function joinRoom() {
+    const code = document.getElementById("roomCode").value.trim();
+    if(!code) return;
+
+    fetch("/room/join", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({room: code})
+    })
+    .then(r => {
+        if(r.ok) {
+            room = code;
+            lastLen = 0;
+            load();
+        } else {
+            alert("Room does not exist or you are banned.");
+        }
     });
 }
 
