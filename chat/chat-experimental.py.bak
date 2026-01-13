@@ -1,0 +1,459 @@
+from flask import Flask, request, jsonify, send_from_directory, session
+import bcrypt, os, time, threading, uuid
+
+BANS_FILE = "bans.txt"
+COOKIE_NAME = "chat_id"
+
+banned_cookies = set()
+
+app = Flask(__name__)
+app.secret_key = os.urandom(32)
+
+BASE = os.path.dirname(__file__)
+MSG_DIR = os.path.join(BASE,"messages")
+ROOM_DIR = os.path.join(MSG_DIR,"rooms")
+USERS_FILE = os.path.join(BASE,"users.txt")
+BANS_FILE = os.path.join(BASE,"bans.txt")
+session_store = {}
+muted_users = set()
+banned_cookies = set()
+banned_ips = set()
+
+BANS_FILE = "bans.txt"
+IP_BANS_FILE = "ip_bans.txt"
+
+os.makedirs(ROOM_DIR, exist_ok=True)
+
+RATE_LIMIT = 5
+RATE_WINDOW = 5
+MESSAGE_EXPIRY = 60*60*24*180  # 6 months
+
+online_users = {}
+muted_users = set()
+msg_times = {}
+
+def load_bans():
+    global banned_cookies
+    if os.path.exists(BANS_FILE):
+        with open(BANS_FILE) as f:
+            banned_cookies = set(x.strip() for x in f if x.strip())
+def load_ip_bans():
+    global banned_ips
+    if os.path.exists(IP_BANS_FILE):
+        with open(IP_BANS_FILE) as f:
+            banned_ips = set(x.strip() for x in f if x.strip())
+
+load_ip_bans()
+load_bans()
+
+# ---------------- Users ----------------
+def load_users():
+    users = {}
+    if os.path.exists(USERS_FILE):
+        for l in open(USERS_FILE):
+            if ":" not in l: continue
+            u, h, r = l.strip().split(":")
+            users[u] = {"hash":h.encode(), "role":r}
+    return users
+
+def save_user(username, password, role="user"):
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    with open(USERS_FILE,"a") as f:
+        f.write(f"{username}:{hashed}:{role}\n")
+
+# ---------------- Auth ----------------
+def auth():
+    u = session.get("user")
+    if u:
+        online_users[u] = time.time()
+    return u
+
+# ---------------- Rate Limit ----------------
+def ratelimit(user):
+    now = time.time()
+    lst = [t for t in msg_times.get(user, []) if now - t < RATE_WINDOW]
+    lst.append(now)
+    msg_times[user] = lst
+    return len(lst) > RATE_LIMIT
+
+# ---------------- Message Storage ----------------
+def msg_path(room):
+    return os.path.join(MSG_DIR, "public.txt" if room=="public" else f"{room}.txt")
+
+def write_msg(path, user, msg):
+    ts = time.strftime("[%H:%M:%S]", time.localtime())
+    mid = uuid.uuid4().hex[:8]
+    with open(path,"a") as f:
+        f.write(f"{ts}|{user}: {msg}|{mid}\n")
+
+def read_msgs(path):
+    msgs = []
+    if not os.path.exists(path): return msgs
+    with open(path) as f:
+        for l in f:
+            try:
+                ts_user_msg, mid = l.rsplit("|",1)
+                ts, rest = ts_user_msg.split("|",1)
+                msgs.append({"id":mid.strip(), "text":ts+"|"+rest})
+            except:
+                continue
+    return msgs
+
+# ---------------- Cleanup ----------------
+def cleanup():
+    while True:
+        now = time.time()
+        for f in os.listdir(MSG_DIR):
+            p = os.path.join(MSG_DIR,f)
+            if not os.path.isfile(p): continue
+            kept=[]
+            for l in open(p):
+                kept.append(l)
+            with open(p,"w") as fw:
+                fw.writelines(kept)
+        time.sleep(3600)
+
+def prune():
+    while True:
+        now = time.time()
+        for u in list(online_users):
+            if now - online_users[u] > 15: del online_users[u]
+        time.sleep(5)
+
+threading.Thread(target=cleanup,daemon=True).start()
+threading.Thread(target=prune,daemon=True).start()
+
+# ---------------- Routes ----------------
+@app.route("/")
+def index(): return send_from_directory("templates","chat.html")
+
+@app.route("/register", methods=["POST"])
+def register():
+    cookie = request.cookies.get("chat_cookie")
+    ip = request.remote_addr
+
+    if cookie in banned_cookies or ip in banned_ips:
+        return "banned", 403
+
+    data = request.json or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not username or not password:
+        return "invalid", 400
+
+    users = load_users()
+    if username in users:
+        return "exists", 409
+
+    save_user(username, password)
+    return "ok"
+
+@app.route("/login", methods=["POST"])
+def login():
+    if request.chat_cookie in banned_cookies:
+        return "banned", 403
+
+    d = request.json or {}
+    users = load_users()
+
+    u = d.get("username")
+    p = d.get("password")
+
+    if u not in users:
+        return jsonify(status="fail"), 403
+
+    if not bcrypt.checkpw(p.encode(), users[u]["hash"]):
+        return jsonify(status="fail"), 403
+
+    # ✅ create stable session id
+    sid = uuid.uuid4().hex
+    session["sid"] = sid
+    session["user"] = u
+
+    session_store[sid] = {
+        "user": u,
+        "cookie": request.chat_cookie,
+        "ip": request.remote_addr,
+        "role": users[u].get("role", "user")
+    }
+
+    return jsonify(status="ok")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return "ok"
+
+@app.route("/whoami")
+def whoami():
+    u = session.get("user")
+    if u:
+        online_users[u] = time.time()
+        return jsonify(user=u)
+    return jsonify(user=None)
+
+@app.route("/ping",methods=["POST"])
+def ping():
+    if auth(): return "ok"
+    return "fail",403
+
+@app.route("/send",methods=["POST"])
+def send():
+    if request.chat_cookie in banned_cookies:
+    	return "banned", 403
+    u = auth()
+    if u in muted_users:
+        return "muted", 403
+    if not u: return "no",403
+    if ratelimit(u): return "rate",429
+    d = request.json
+    room = d.get("room","public")
+    p = msg_path(room)
+    os.makedirs(MSG_DIR, exist_ok=True)
+    write_msg(p,u,d["message"])
+    return "ok"
+
+@app.route("/messages")
+def messages():
+    room = request.args.get("room","public")
+    return jsonify(read_msgs(msg_path(room)))
+
+@app.route("/users")
+def users():
+    return jsonify(sorted(online_users.keys()))
+
+@app.route("/room/new")
+def new_room():
+    r = uuid.uuid4().hex[:6]
+    open(msg_path(r),"a").close()
+    return r
+
+@app.before_request
+def assign_cookie_and_check_ban():
+    cid = request.cookies.get(COOKIE_NAME)
+
+    if not cid:
+        cid = uuid.uuid4().hex
+        request.new_cookie = cid
+    else:
+        request.new_cookie = None
+
+    request.chat_cookie = cid
+
+    if cid in banned_cookies:
+        return "banned", 403
+
+@app.after_request
+def persist_cookie(response):
+    cid = getattr(request, "new_cookie", None)
+    if cid:
+        response.set_cookie(COOKIE_NAME, cid, max_age=60*60*24*365*5)
+    return response
+
+@app.route("/command", methods=["POST"])
+def command():
+    data = request.json or {}
+    cmdline = data.get("cmd", "").strip()
+
+    sid = session.get("sid")
+    if not sid:
+        return "not logged in", 403
+
+    sess = session_store.get(sid)
+    if not sess:
+        return "session expired", 403
+
+    user = sess.get("user")
+
+    # -----------------
+    # UI ROLE CHECK
+    # -----------------
+    if cmdline == "/checkrole":
+        return jsonify(role=sess.get("role", "user"))
+
+    users = load_users()
+
+    # -----------------
+    # ADMIN GUARD
+    # -----------------
+    if users.get(user, {}).get("role") != "admin":
+        return "forbidden", 403
+
+    parts = cmdline.split(" ", 1)
+    cmd = parts[0]
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    if cmd == "/mute":
+        muted_users.add(arg)
+        return "ok"
+
+    elif cmd == "/unmute":
+        muted_users.discard(arg)
+    @app.route("/command", methods=["POST"])
+def command():
+    data = request.json or {}
+    user = sess.get("user")
+    users = load_users()
+    if not sid:
+        return "not logged in", 403
+
+    sess = session_store.get(sid)
+    if not sess:
+        return "session expired", 403
+        # Admin check (except /checkrole)
+    if data.get("cmd") == "/checkrole":
+        return jsonify(role=sess.get("role", "user"))
+
+    if users.get(user, {}).get("role") != "admin":
+        return "forbidden", 403
+
+
+
+
+    cmdline = data.get("cmd", "").strip()
+
+    if not cmdline.startswith("/"):
+        return "invalid", 400
+
+    parts = cmdline.split(" ", 1)
+    cmd = parts[0]
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    sess = session_store.get(sid)
+    # ROLE CHECK (used by UI)
+    if cmdline == "/checkrole":
+        return jsonify(role=sess.get("role", "user"))
+
+    # ------------------
+    # ADMIN-ONLY CHECK
+    # ------------------
+    if not sess or sess.get("role") != "admin":
+        return "forbidden", 403
+
+    # ------------------
+    # MUTE / UNMUTE
+    # ------------------
+    if cmd == "/mute":
+        muted_users.add(arg)
+        return "ok"
+
+    if cmd == "/unmute":
+        muted_users.discard(arg)
+        return "ok"
+@app.route("/command", methods=["POST"])
+def command():
+    data = request.json or {}
+    user = sess.get("user")
+    users = load_users()
+    if not sid:
+        return "not logged in", 403
+
+    sess = session_store.get(sid)
+    if not sess:
+        return "session expired", 403
+        # Admin check (except /checkrole)
+    if data.get("cmd") == "/checkrole":
+        return jsonify(role=sess.get("role", "user"))
+
+    if users.get(user, {}).get("role") != "admin":
+        return "forbidden", 403
+
+
+
+
+    cmdline = data.get("cmd", "").strip()
+
+    if not cmdline.startswith("/"):
+        return "invalid", 400
+
+    parts = cmdline.split(" ", 1)
+    cmd = parts[0]
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    sess = session_store.get(sid)
+    # ROLE CHECK (used by UI)
+    if cmdline == "/checkrole":
+        return jsonify(role=sess.get("role", "user"))
+
+    # ------------------
+    # ADMIN-ONLY CHECK
+    # ------------------
+    if not sess or sess.get("role") != "admin":
+        return "forbidden", 403
+
+    # ------------------
+    # MUTE / UNMUTE
+    # ------------------
+    if cmd == "/mute":
+        muted_users.add(arg)
+        return "ok"
+
+    if cmd == "/unmute":
+        muted_users.discard(arg)
+        return "ok"
+
+    # ------------------
+    # COOKIE BAN
+    # ------------------
+    if cmd == "/ban":
+        if not arg:
+            return "no target", 400
+
+        for s in session_store.values():
+            if s.get("user") == arg:
+                cid = s.get("cookie")
+                if cid:
+                    banned_cookies.add(cid)
+                    with open(BANS_FILE, "a") as f:
+                        f.write(cid + "\n")
+                    return "ok"
+        return "user not found", 404
+
+    # ------------------
+    # IP BAN
+    # ------------------
+    if cmd == "/ipban":
+        if not arg:
+            return "no target", 400
+
+        for s in session_store.values():
+            if s.get("user") == arg:
+                ip = s.get("ip")
+                if ip:
+                    banned_ips.add(ip)
+                    with open(IP_BANS_FILE, "a") as f:
+                        f.write(ip + "\n")
+                    return "ok"
+        return "user not found", 404
+
+    # ------------------
+    # DELETE MESSAGE
+    # ------------------
+    if cmd == "/delete":
+        msg_id = arg
+        if not msg_id:
+            return "no id", 400
+
+        files = [msg_path("public")]
+        for r in os.listdir(ROOM_DIR):
+            files.append(os.path.join(ROOM_DIR, r))
+
+        for file in files:
+            if not os.path.exists(file):
+                continue
+            with open(file) as fr:
+                lines = fr.readlines()
+            with open(file, "w") as fw:
+                for l in lines:
+                    if not l.strip().endswith(msg_id):
+                        fw.write(l)
+        return "ok"
+
+    return "unknown command", 400
+
+
+# ---------------- Start ----------------
+if __name__=="__main__":
+    app.run(host="0.0.0.0", port=5000)
