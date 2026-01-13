@@ -26,6 +26,11 @@ online_users = {}
 muted_users = set()
 msg_times = {}
 
+def get_cookie_id():
+    if COOKIE_NAME not in session:
+        session[COOKIE_NAME] = uuid.uuid4().hex
+    return session[COOKIE_NAME]
+
 # ---------------- Users ----------------
 def load_users():
     users = {}
@@ -43,10 +48,26 @@ def save_user(username, password, role="user"):
 
 # ---------------- Auth ----------------
 def auth():
+    get_cookie_id()
+
+    if is_banned():
+        session.clear()
+        return None
+
     u = session.get("user")
     if u:
         online_users[u] = time.time()
     return u
+def is_banned():
+    if not os.path.exists(BANS_FILE):
+        return False
+
+    bans = open(BANS_FILE).read().splitlines()
+    cid = session.get(COOKIE_NAME)
+    ip = request.remote_addr
+
+    return f"cookie:{cid}" in bans or f"ip:{ip}" in bans
+
 
 # ---------------- Rate Limit ----------------
 def ratelimit(user):
@@ -117,6 +138,7 @@ def register():
 
 @app.route("/login",methods=["POST"])
 def login():
+    if is_banned(): return jsonify(status="banned"),403
     d = request.json
     users = load_users()
     u = d.get("username")
@@ -149,6 +171,7 @@ def send():
     u = auth()
     if not u: return "no",403
     if ratelimit(u): return "rate",429
+    if is_banned(): return jsonify(status="banned"),403
     d = request.json
     room = d.get("room","public")
     p = msg_path(room)
@@ -193,8 +216,28 @@ def command():
 
     if cmd=="/mute": muted_users.add(arg)
     elif cmd=="/unmute": muted_users.discard(arg)
-    elif cmd=="/ban":
-        with open(BANS_FILE,"a") as f: f.write(arg+"\n")
+    elif cmd == "/ban":
+        cid = session.get(COOKIE_NAME)
+        with open(BANS_FILE, "a") as f:
+            f.write(f"cookie:{cid}\n")
+    elif cmd == "/ipban":
+        ip = request.remote_addr
+        with open(BANS_FILE, "a") as f:
+            f.write(f"ip:{ip}\n")
+    elif cmd == "/unban":
+        cid = session.get(COOKIE_NAME)
+        ip = request.remote_addr
+
+        if not os.path.exists(BANS_FILE):
+            return "ok"
+
+        with open(BANS_FILE) as f:
+            lines = f.readlines()
+
+        with open(BANS_FILE, "w") as f:
+            for l in lines:
+                if l.strip() not in (f"cookie:{cid}", f"ip:{ip}"):
+                    f.write(l)
     elif cmd=="/delete":
         # delete by message ID
         for file in [msg_path("public")]+[os.path.join(ROOM_DIR,f) for f in os.listdir(ROOM_DIR)]:
