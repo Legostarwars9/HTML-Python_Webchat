@@ -42,10 +42,35 @@ button:hover {background:#3a3f4a; cursor:pointer;}
     transform: translateY(2px);
 }
 
+#statusPopup {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    max-width: 300px;
+    padding: 8px 10px;
+    background: #2a2f3a;
+    color: #e6e6e6;
+    border: 1px solid #3a3f4a;
+    border-radius: 6px;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    white-space: pre-wrap;
+    z-index: 1000;
+}
+
+#statusPopup.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 </style>
 </head>
 <body>
 <button id="back-button" onclick="window.location.href='https://flights-gadgets-oct-excited.trycloudflare.com'">← Back</button>
+<div id="statusPopup" role="status" aria-live="polite"></div>
 <div id="container">
 <div id="chatArea">
 <h2>Website Chat</h2>
@@ -115,6 +140,7 @@ function login(){
     
     fetch("/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:user,password:pass})})
     .then(r=>r.json()).then(d=>{
+        showStatus(d);
         if(d.status==="ok"){ showChat(); start(); checkAdmin(); } else errorDiv.textContent="Login failed";
     });
 }
@@ -181,24 +207,41 @@ function send(){
         body: JSON.stringify({message: msg, cmd: msg, room: room})
     })
     .then(r => {
-        if(r.status === 402) {           // Muted
-            errorDiv.textContent = "You are muted. You cannot send messages.";
+        if(msg.startsWith("/")){
+            if(r.status === 403){ showStatus("Admin only."); return; }
+            if(r.status === 404){ showStatus("User not found."); return; }
+            if(r.status === 400){ showStatus("Command missing target or invalid."); return; }
+            return r.json().then(res => showStatus(res));
         }
-        else if(r.status === 403) {      // Banned
-            errorDiv.textContent = "You are banned. Access denied.";
-        }
-        else if(r.status === 429) {      // Rate limit
-            errorDiv.textContent = "Rate limit exceeded. Please wait a few seconds.";
-        }
-        else if(r.ok) {
-            errorDiv.textContent = "";   // Clear any previous error
-        }
+        return r.json().then(res => {
+            showStatus(res);
+            if(res.status === "muted") {
+                errorDiv.textContent = "You are muted. You cannot send messages.";
+            } else if(res.status === "banned" || res.status === "ip_banned") {
+                errorDiv.textContent = "You are banned. Access denied.";
+            } else if(res.status === "rate") {
+                errorDiv.textContent = "Rate limit exceeded. Please wait a few seconds.";
+            } else if(res.status === "ok") {
+                errorDiv.textContent = "";
+            }
+        });
     });
 
     messageInput.value = ""; 
 }
 
-function deleteMsg(id){ fetch("/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cmd:"/delete "+id})}).then(()=>load()); }
+function deleteMsg(id){
+    fetch("/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cmd:"/delete "+id})})
+    .then(r=>{
+        if(r.ok){
+            load();
+            return r.json().then(res=>showStatus(res));
+        }
+        if(r.status === 403){ showStatus("Admin only."); return; }
+        if(r.status === 404){ showStatus("User not found."); return; }
+        if(r.status === 400){ showStatus("Delete failed: missing message id."); return; }
+    });
+}
 function loadUsers(){ fetch("/users").then(r=>r.json()).then(d=>userList.innerHTML=d.map(u=>`<div class="user">${u}</div>`).join("")); }
 function switchRoom(r){ room=r; lastLen=0; load(); }
 function newRoom(){ fetch("/room/new").then(r=>r.text()).then(switchRoom); }
@@ -244,8 +287,11 @@ function joinRoom() {
     });
 }
 function showStatus(msg){
-    errorDiv.textContent = msg;
-    setTimeout(()=>errorDiv.textContent="",5000);
+    const popup = document.getElementById("statusPopup");
+    const message = typeof msg === "string" ? msg : JSON.stringify(msg);
+    popup.textContent = message;
+    popup.classList.add("show");
+    setTimeout(()=>popup.classList.remove("show"), 4000);
 }
 
 // ---------------- Start fetching ----------------
