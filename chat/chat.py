@@ -23,6 +23,7 @@ RATE_WINDOW = 5
 MESSAGE_EXPIRY = 60*60*24*180  # 6 months
 
 online_users = {}
+user_sessions = {}
 muted_users = set()
 msg_times = {}
 
@@ -59,16 +60,31 @@ def auth():
     u = session.get("user")
     if u:
         online_users[u] = time.time()
+        user_sessions[u] = {
+            "cookie": session.get(COOKIE_NAME),
+            "ip": request.remote_addr,
+            "last_seen": time.time(),
+        }
     return u
-def is_banned():
+def ban_status(username=None):
     if not os.path.exists(BANS_FILE):
-        return False
+        return None
 
     bans = open(BANS_FILE).read().splitlines()
     cid = session.get(COOKIE_NAME)
     ip = request.remote_addr
+    user = username or session.get("user")
 
-    return f"cookie:{cid}" in bans or f"ip:{ip}" in bans
+    if f"ip:{ip}" in bans:
+        return "ip_banned"
+    if f"cookie:{cid}" in bans:
+        return "banned"
+    if user and f"user:{user}" in bans:
+        return "banned"
+    return None
+
+def is_banned():
+    return ban_status(session.get("user")) is not None
 
 
 # ---------------- Rate Limit ----------------
@@ -157,14 +173,17 @@ def register():
 
 @app.route("/login",methods=["POST"])
 def login():
-    if is_banned(): return jsonify(status="banned"),403
     d = request.json
     users = load_users()
     u = d.get("username")
     p = d.get("password")
+    get_cookie_id()
+    status = ban_status(u)
+    if status:
+        return jsonify(status=status),403
     if u in users and bcrypt.checkpw(p.encode(), users[u]["hash"]):
         session["user"] = u
-        return jsonify(status="ok")
+        return jsonify(status="ok", user=u)
     return jsonify(status="fail"),403
 
 @app.route("/logout")
@@ -177,6 +196,11 @@ def whoami():
     u = session.get("user")
     if u:
         online_users[u] = time.time()
+        user_sessions[u] = {
+            "cookie": session.get(COOKIE_NAME),
+            "ip": request.remote_addr,
+            "last_seen": time.time(),
+        }
         return jsonify(user=u)
     return jsonify(user=None)
 
@@ -187,16 +211,24 @@ def ping():
 
 @app.route("/send",methods=["POST"])
 def send():
+    get_cookie_id()
     u = auth()
-    if not u: return "banned",403
-    if u in muted_users: return "muted",402   # <-- changed to 402
-    if ratelimit(u): return "rate",429
+    if not u:
+        return jsonify(status="banned"),403
+    status = ban_status(u)
+    if status:
+        session.clear()
+        return jsonify(status=status),403
+    if u in muted_users:
+        return jsonify(status="muted"),402
+    if ratelimit(u):
+        return jsonify(status="rate"),429
     d = request.json
     room = session.get("room", "public")
     p = msg_path(room)
     os.makedirs(MSG_DIR, exist_ok=True)
     write_msg(p, u, d["message"])
-    return "ok"
+    return jsonify(status="ok")
 
 
 @app.route("/messages")
@@ -227,48 +259,102 @@ def command():
 
     # Only admins for other commands
     if not user or users.get(user,{}).get("role") != "admin":
-        return "forbidden",403
+        return jsonify(status="forbidden", message="Admin only"), 403
 
-    parts = data["cmd"].split(maxsplit=1)
-    if not parts: return "bad",400
+    cmd_line = data.get("cmd", "").strip()
+    parts = cmd_line.split(maxsplit=1)
+    if not parts:
+        return jsonify(status="bad", message="Missing command"), 400
     cmd = parts[0]
     arg = parts[1] if len(parts)>1 else ""
 
-    if cmd=="/mute": muted_users.add(arg)
-    elif cmd=="/unmute": muted_users.discard(arg)
+    if cmd=="/mute":
+        if not arg:
+            return jsonify(status="bad", message="Missing username"), 400
+        muted_users.add(arg)
+        return jsonify(status="ok", message=f"Muted {arg}")
+    elif cmd=="/unmute":
+        if not arg:
+            return jsonify(status="bad", message="Missing username"), 400
+        muted_users.discard(arg)
+        return jsonify(status="ok", message=f"Unmuted {arg}")
     elif cmd == "/ban":
-        cid = session.get(COOKIE_NAME)
+        if not arg:
+            return jsonify(status="bad", message="Missing username"), 400
+        target = user_sessions.get(arg)
+        if not target:
+            return jsonify(status="not_found", message="User not found"), 404
         with open(BANS_FILE, "a") as f:
-            f.write(f"cookie:{cid}\n")
+            f.write(f"user:{arg}\n")
+            if target.get("cookie"):
+                f.write(f"cookie:{target['cookie']}\n")
+            if target.get("ip"):
+                f.write(f"ip:{target['ip']}\n")
+        return jsonify(status="ok", message=f"Banned {arg}")
     elif cmd == "/ipban":
-        ip = request.remote_addr
+        if not arg:
+            return jsonify(status="bad", message="Missing username"), 400
+        target = user_sessions.get(arg)
+        if not target or not target.get("ip"):
+            return jsonify(status="not_found", message="User not found"), 404
+        ip = target["ip"]
         with open(BANS_FILE, "a") as f:
             f.write(f"ip:{ip}\n")
+        return jsonify(status="ok", message=f"IP banned {arg}")
     elif cmd == "/unban":
-        cid = session.get(COOKIE_NAME)
-        ip = request.remote_addr
+        targets = []
+        if arg:
+            if arg.startswith("cookie:") or arg.startswith("ip:"):
+                targets.append(arg)
+            else:
+                target = user_sessions.get(arg)
+                if not target:
+                    return jsonify(status="not_found", message="User not found"), 404
+                targets.append(f"user:{arg}")
+                if target.get("cookie"):
+                    targets.append(f"cookie:{target['cookie']}")
+                if target.get("ip"):
+                    targets.append(f"ip:{target['ip']}")
+        else:
+            cid = session.get(COOKIE_NAME)
+            ip = request.remote_addr
+            targets.extend([f"cookie:{cid}", f"ip:{ip}"])
 
         if not os.path.exists(BANS_FILE):
-            return "ok"
+            return jsonify(status="ok", message="No bans file")
 
         with open(BANS_FILE) as f:
             lines = f.readlines()
 
         with open(BANS_FILE, "w") as f:
             for l in lines:
-                if l.strip() not in (f"cookie:{cid}", f"ip:{ip}"):
+                if l.strip() not in targets:
                     f.write(l)
+        return jsonify(status="ok", message="Unbanned")
     elif cmd=="/delete":
+        if not arg:
+            return jsonify(status="bad", message="Missing message id"), 400
         # delete by message ID
-        for file in [msg_path("public")]+[os.path.join(ROOM_DIR,f) for f in os.listdir(ROOM_DIR)]:
-            if not os.path.exists(file): continue
+        message_files = []
+        if os.path.isdir(MSG_DIR):
+            for name in os.listdir(MSG_DIR):
+                path = os.path.join(MSG_DIR, name)
+                if os.path.isfile(path) and name.endswith(".txt"):
+                    message_files.append(path)
+        if os.path.isdir(ROOM_DIR):
+            for name in os.listdir(ROOM_DIR):
+                path = os.path.join(ROOM_DIR, name)
+                if os.path.isfile(path):
+                    message_files.append(path)
+        for file in message_files:
             with open(file) as fr:
                 lines = fr.readlines()
             with open(file,"w") as fw:
                 for l in lines:
                     if not l.strip().endswith(arg):
                         fw.write(l)
-    return "ok"
+        return jsonify(status="ok", message="Deleted")
+    return jsonify(status="bad", message="Unknown command"), 400
 
 # ---------------- Start ----------------
 if __name__=="__main__":
