@@ -1,7 +1,6 @@
 # HTML-Python_Webchat
-<h3>So I was once looking for a Web Based Application like Discord that I could set up in my home on a Raspberry PI mini server that I have. I couldn't find one that I could easily install onto my Raspberry PI and set up within a few minutes...</h3>
-
-<h3>So with help of ChatGPT, I created one.</h3>
+<h4>So I was once looking for a Web Based Application like Discord that I could set up in my home on a Raspberry PI mini server that I have. I couldn't find one that I could easily install onto my Raspberry PI and set up within a few minutes...</h4>
+<h4>So with help of ChatGPT, I created one.</h4>
 
 <h2>--Features--</h2>
 <ul>
