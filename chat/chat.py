@@ -47,7 +47,7 @@ def load_users():
 def save_user(username, password, role="user"):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     with open(USERS_FILE,"a") as f:
-        f.write(f"{username}:{hashed}:{role}\n")
+        f.write(f"\n{username}:{hashed}:{role}")
 
 # ---------------- Auth ----------------
 def auth():
@@ -224,7 +224,8 @@ def send():
     if ratelimit(u):
         return jsonify(status="rate"),429
     d = request.json
-    room = session.get("room", "public")
+    room = d.get("room", session.get("room", "public"))
+    session["room"] = room  # keep session in sync
     p = msg_path(room)
     os.makedirs(MSG_DIR, exist_ok=True)
     write_msg(p, u, d["message"])
