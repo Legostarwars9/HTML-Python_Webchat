@@ -289,8 +289,6 @@ def command():
             f.write(f"user:{arg}\n")
             if target.get("cookie"):
                 f.write(f"cookie:{target['cookie']}\n")
-            if target.get("ip"):
-                f.write(f"ip:{target['ip']}\n")
         return jsonify(status="ok", message=f"Banned {arg}")
     elif cmd == "/ipban":
         if not arg:
